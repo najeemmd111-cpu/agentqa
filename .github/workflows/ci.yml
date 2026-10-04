@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12', cache: pip }
+      - run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check . && ruff format --check .
+      - name: Unit + integration tests
+        run: pytest
+
+  agent-self-test:
+    # Dogfooding: run the agent against the buggy demo and publish its report.
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12', cache: pip }
+      - run: pip install -e .
+      - name: Start demo target
+        run: |
+          uvicorn demo_target.app:app --port 9000 &
+          sleep 3
+      - name: Run AgentQA (LLM used when a key is configured, offline otherwise)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          agentqa run --spec demo_target/openapi.yaml --base-url http://localhost:9000 \
+            --auth "Bearer demo-token" --engine pytest --out agentqa-report
+          cat agentqa-report/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with: { name: agentqa-report, path: agentqa-report }
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t agentqa:ci .

@@ -1,0 +1,104 @@
+openapi: 3.0.3
+info:
+  title: Inventory API (demo target)
+  version: 1.0.0
+  description: >
+    The contract the demo service is SUPPOSED to honour. The implementation in
+    demo_target/app.py deliberately violates it in a few places so AgentQA has
+    real bugs to find.
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    ItemCreate:
+      type: object
+      required: [name, price, quantity]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100, example: "Ergonomic keyboard" }
+        price: { type: number, minimum: 0, example: 49.9 }
+        quantity: { type: integer, minimum: 0, maximum: 10000, example: 25 }
+        category: { type: string, enum: [hardware, software, accessory], example: hardware }
+    Item:
+      allOf:
+        - $ref: '#/components/schemas/ItemCreate'
+        - type: object
+          properties:
+            id: { type: integer }
+    OrderCreate:
+      type: object
+      required: [item_id, quantity]
+      properties:
+        item_id: { type: integer, example: 1 }
+        quantity: { type: integer, minimum: 1, example: 2 }
+    Order:
+      type: object
+      properties:
+        id: { type: integer }
+        item_id: { type: integer }
+        quantity: { type: integer }
+        total: { type: number }
+paths:
+  /health:
+    get:
+      operationId: health
+      summary: Liveness probe
+      responses:
+        '200': { description: OK }
+  /items:
+    get:
+      operationId: listItems
+      summary: List items with pagination
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: Items }
+        '422': { description: Invalid pagination }
+    post:
+      operationId: createItem
+      summary: Create an inventory item
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemCreate' }
+      responses:
+        '201': { description: Created }
+        '401': { description: Missing or invalid token }
+        '422': { description: Validation error }
+  /items/{item_id}:
+    parameters:
+      - { name: item_id, in: path, required: true, schema: { type: integer } }
+    get:
+      operationId: getItem
+      summary: Fetch one item
+      responses:
+        '200': { description: Item }
+        '404': { description: Not found }
+    delete:
+      operationId: deleteItem
+      summary: Delete an item (admin)
+      security: [{ bearer: [] }]
+      responses:
+        '204': { description: Deleted }
+        '401': { description: Missing or invalid token }
+        '404': { description: Not found }
+  /orders:
+    post:
+      operationId: createOrder
+      summary: Order an item; must not exceed available stock
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderCreate' }
+      responses:
+        '201': { description: Created }
+        '401': { description: Missing or invalid token }
+        '404': { description: Unknown item }
+        '409': { description: Insufficient stock }
+        '422': { description: Validation error }

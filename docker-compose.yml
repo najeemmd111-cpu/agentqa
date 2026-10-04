@@ -1,0 +1,15 @@
+services:
+  agentqa:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      AGENTQA_LLM: ${AGENTQA_LLM:-auto}
+    depends_on: [demo]
+
+  # The deliberately buggy API AgentQA is pointed at in the demo
+  demo:
+    build: .
+    command: ["uvicorn", "demo_target.app:app", "--host", "0.0.0.0", "--port", "9000"]
+    ports: ["9000:9000"]

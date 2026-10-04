@@ -1,0 +1,20 @@
+# Drop this into another repo's .github/workflows/ to gate PRs on AgentQA findings.
+name: API quality gate
+on: [pull_request]
+jobs:
+  agentqa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install "git+https://github.com/<you>/agentqa.git"
+      - name: Start the service under test
+        run: docker compose up -d && sleep 10
+      - name: AgentQA (fails the PR on critical/high findings)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: agentqa run --spec openapi.yaml --base-url http://localhost:8080 --fail-on high --out report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: agentqa-report, path: report }
